@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'webview_page.dart';
 
 late List<CameraDescription> _cameras;
 
@@ -19,12 +22,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Camera + Upload',
+      title: 'Lichen Identifier',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Camera Inference + Location'),
+      home: const MyHomePage(title: 'Lichen Identifier'),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -43,6 +47,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final ImagePicker _picker = ImagePicker();
   bool _isCapturing = false;
   bool _cameraInitialized = false;
+  String? _resultText;
+  bool _loading = false;
 
   @override
   void initState() {
@@ -57,44 +63,44 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         _cameraInitialized = true;
       });
-      debugPrint("✅ Camera initialized successfully");
     } catch (e) {
-      debugPrint("‼️ Camera initialization error: $e");
+      debugPrint("Camera initialization error: $e");
     }
   }
 
   Future<void> _takePicture() async {
     if (_isCapturing || !_controller.value.isInitialized) return;
-    _isCapturing = true;
+    setState(() => _isCapturing = true);
     try {
       final XFile image = await _controller.takePicture();
-      debugPrint("📸 Picture taken: ${image.path}");
       setState(() {
         _imagePath = image.path;
+        _resultText = null;
       });
       await _runInferenceAndUpload(image.path);
     } catch (e) {
-      debugPrint('‼️ Error taking picture: $e');
+      debugPrint('Error taking picture: $e');
     } finally {
-      _isCapturing = false;
+      setState(() => _isCapturing = false);
     }
   }
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      debugPrint("🖼️ Image picked from gallery: ${image.path}");
       setState(() {
         _imagePath = image.path;
+        _resultText = null;
       });
       await _runInferenceAndUpload(image.path);
-    } else {
-      debugPrint("⚠️ No image selected.");
     }
   }
 
   Future<void> _runInferenceAndUpload(String imagePath) async {
-    debugPrint("🚀 Starting inference for: $imagePath");
+    setState(() {
+      _loading = true;
+      _resultText = null;
+    });
 
     final url = Uri.parse("https://predict.ultralytics.com");
     final headers = {"x-api-key": "99aa2048e2c4a2563aa2d16612e4fb675294f2c9e2"};
@@ -107,19 +113,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
     try {
       var file = File(imagePath);
-      debugPrint("🗂️ File exists: ${await file.exists()}");
 
       var request = http.MultipartRequest("POST", url)
         ..headers.addAll(headers)
         ..fields.addAll(data)
         ..files.add(await http.MultipartFile.fromPath("file", file.path));
 
-      debugPrint("📤 Sending inference request...");
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
-
-      debugPrint("📥 Inference response: ${response.statusCode}");
-      debugPrint("📥 Response body: $responseBody");
 
       String resultText = "Unknown";
       if (response.statusCode == 200) {
@@ -132,29 +133,27 @@ class _MyHomePageState extends State<MyHomePage> {
         resultText = "Error: ${response.statusCode} - $responseBody";
       }
 
-      debugPrint("🔍 Inference result: $resultText");
-      _showResult(resultText);
+      setState(() {
+        _resultText = resultText;
+      });
       await _uploadToServer(imagePath, resultText);
-    } catch (e, stackTrace) {
-      debugPrint("‼️ Inference error: $e");
-      debugPrint("📋 Stack trace:\n$stackTrace");
+    } catch (e) {
+      setState(() {
+        _resultText = "Inference error: $e";
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
   Future<void> _uploadToServer(String imagePath, String result) async {
-    debugPrint("🚀 Starting upload process...");
-    debugPrint("🖼️ Image path: $imagePath");
-    debugPrint("📄 Result: $result");
-
     try {
       final file = File(imagePath);
-      if (!await file.exists()) {
-        debugPrint("❌ Image file does not exist. Aborting.");
-        return;
-      }
+      if (!await file.exists()) return;
 
       Position position = await _getCurrentPosition();
-      debugPrint("📍 Location - Lat: ${position.latitude}, Lon: ${position.longitude}");
 
       final url = Uri.parse("https://mb73pr7n-3000.asse.devtunnels.ms/upload");
 
@@ -164,26 +163,13 @@ class _MyHomePageState extends State<MyHomePage> {
         ..fields['longitude'] = position.longitude.toString()
         ..files.add(await http.MultipartFile.fromPath('image', imagePath));
 
-      debugPrint("📤 Sending upload request...");
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-
-      debugPrint("📥 Upload response status: ${response.statusCode}");
-      debugPrint("📥 Upload response body: $responseBody");
-
-      if (response.statusCode == 200) {
-        debugPrint("✅ Upload successful.");
-      } else {
-        debugPrint("❌ Upload failed with status ${response.statusCode}");
-      }
-    } catch (e, stackTrace) {
-      debugPrint("‼️ Upload error: $e");
-      debugPrint("📋 Stack trace:\n$stackTrace");
+      await request.send();
+    } catch (e) {
+      // Optionally handle upload errors
     }
   }
 
   Future<Position> _getCurrentPosition() async {
-    debugPrint("📡 Checking location permission...");
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       await Geolocator.openLocationSettings();
@@ -202,24 +188,7 @@ class _MyHomePageState extends State<MyHomePage> {
       throw Exception("Location permission permanently denied");
     }
 
-    Position position = await Geolocator.getCurrentPosition();
-    debugPrint("📍 Location retrieved: ${position.latitude}, ${position.longitude}");
-    return position;
-  }
-
-  void _showResult(String result) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Prediction Result"),
-        content: Text(result),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("OK"))
-        ],
-      ),
-    );
+    return await Geolocator.getCurrentPosition();
   }
 
   @override
@@ -227,47 +196,132 @@ class _MyHomePageState extends State<MyHomePage> {
     _controller.dispose();
     super.dispose();
   }
+  Widget _buildCameraPreview() {
+    return _controller.value.isInitialized
+        ? SizedBox.expand(
+            child: CameraPreview(_controller),
+          )
+        : const Center(child: CircularProgressIndicator());
+  }
+
+  Widget _buildImagePreview() {
+    if (_imagePath == null) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Image.file(
+        File(_imagePath!),
+        width: 120,
+        height: 120,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Widget _buildResultCard() {
+    if (_resultText == null) return const SizedBox.shrink();
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const Icon(Icons.eco, color: Colors.green, size: 36),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                _resultText!,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FloatingActionButton(
+                heroTag: "camera",
+                onPressed: _isCapturing || _loading ? null : _takePicture,
+                backgroundColor: Colors.green.shade200,
+                child: const Icon(Icons.camera_alt, size: 32),
+                tooltip: "Capture with Camera",
+              ),
+              const SizedBox(width: 32),
+              FloatingActionButton(
+                heroTag: "gallery",
+                onPressed: _isCapturing || _loading ? null : _pickImage,
+                backgroundColor: Colors.green.shade200,
+                child: const Icon(Icons.photo_library, size: 32),
+                tooltip: "Pick from Gallery",
+              ),
+              const SizedBox(width: 32),
+              FloatingActionButton(
+                heroTag: "web",
+                onPressed: _isCapturing || _loading
+                    ? null
+                    : () {
+                        const url = "https://mb73pr7n-3000.asse.devtunnels.ms/gallery";
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => WebViewPage(url: url),
+                          ),
+                        );
+                      },
+                backgroundColor: Colors.green.shade200,
+                child: const Icon(Icons.web, size: 32),
+                tooltip: "Open Gallery Web",
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      backgroundColor: Colors.green.shade50,
+      appBar: AppBar(
+        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.green.shade700,
+        foregroundColor: Colors.white,
+        centerTitle: true,
+        elevation: 0,
+      ),
       body: !_cameraInitialized
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                Positioned.fill(child: CameraPreview(_controller)),
-                Positioned(
-                  bottom: 40,
-                  left: MediaQuery.of(context).size.width / 2 - 70,
-                  child: Row(
+                _buildCameraPreview(),
+                SafeArea(
+                  child: Column(
                     children: [
-                      FloatingActionButton(
-                        onPressed: _takePicture,
-                        child: const Icon(Icons.camera),
-                      ),
-                      const SizedBox(width: 20),
-                      FloatingActionButton(
-                        onPressed: _pickImage,
-                        child: const Icon(Icons.photo_library),
-                      ),
+                      const Spacer(),
+                      if (_loading)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(),
+                        ),
+                      _buildImagePreview(),
+                      _buildResultCard(),
+                      _buildActionButtons(),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
-                if (_imagePath != null)
-                  Positioned(
-                    bottom: 40,
-                    right: 20,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(_imagePath!),
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
               ],
             ),
     );
