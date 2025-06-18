@@ -251,37 +251,55 @@ class _MyHomePageState extends State<MyHomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               FloatingActionButton(
-                heroTag: "camera",
-                onPressed: _isCapturing || _loading ? null : _takePicture,
-                backgroundColor: Colors.green.shade200,
-                child: const Icon(Icons.camera_alt, size: 32),
-                tooltip: "Capture with Camera",
+              heroTag: "camera",
+              onPressed: _isCapturing || _loading ? null : _takePicture,
+              backgroundColor: Colors.green.shade200,
+              child: const Icon(Icons.camera_alt, size: 32),
+              tooltip: "Capture with Camera",
               ),
               const SizedBox(width: 32),
               FloatingActionButton(
-                heroTag: "gallery",
-                onPressed: _isCapturing || _loading ? null : _pickImage,
-                backgroundColor: Colors.green.shade200,
-                child: const Icon(Icons.photo_library, size: 32),
-                tooltip: "Pick from Gallery",
+              heroTag: "gallery",
+              onPressed: _isCapturing || _loading ? null : _pickImage,
+              backgroundColor: Colors.green.shade200,
+              child: const Icon(Icons.photo_library, size: 32),
+              tooltip: "Pick from Gallery",
               ),
               const SizedBox(width: 32),
               FloatingActionButton(
-                heroTag: "web",
-                onPressed: _isCapturing || _loading
-                    ? null
-                    : () {
-                        const url = "https://mb73pr7n-3000.asse.devtunnels.ms/gallery";
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => WebViewPage(url: url),
-                          ),
-                        );
-                      },
-                backgroundColor: Colors.green.shade200,
-                child: const Icon(Icons.web, size: 32),
-                tooltip: "Open Gallery Web",
+              heroTag: "web",
+              onPressed: _isCapturing || _loading
+                ? null
+                : () {
+                  const url = "https://mb73pr7n-3000.asse.devtunnels.ms/gallery";
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                    builder: (context) => WebViewPage(url: url),
+                    ),
+                  );
+                  },
+              backgroundColor: Colors.green.shade200,
+              child: const Icon(Icons.web, size: 32),
+              tooltip: "Open Gallery Web",
+              ),
+              const SizedBox(width: 32),
+              FloatingActionButton(
+              heroTag: "calculate",
+              onPressed: _isCapturing || _loading
+                ? null
+                : () {
+                  const url = "https://mb73pr7n-3000.asse.devtunnels.ms/calculate";
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                    builder: (context) => WebViewPage(url: url),
+                    ),
+                  );
+                  },
+              backgroundColor: Colors.green.shade200,
+              tooltip: "Calculate",
+              child: const Icon(Icons.calculate, size: 32),
               ),
             ],
           ),
