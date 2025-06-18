@@ -12,7 +12,7 @@ class WebViewPage extends StatelessWidget {
       ..loadRequest(Uri.parse(url));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Gallery')),
+      appBar: AppBar(title: const Text('')),
       body: WebViewWidget(controller: controller),
     );
   }
